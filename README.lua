@@ -1,10 +1,10 @@
--- mat hub (фикс: ползунок Speed теперь реально меняет скорость)
+-- mat hub (Rayfield GUI + все функции)
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
-local LocalPlayer = Players.LocalPlayer
-local HttpService = game:GetService("HttpService")
+local UIS = game:GetService("UserInputService")
+local LP = Players.LocalPlayer
+local Http = game:GetService("HttpService")
 local CoreGui = game:GetService("CoreGui")
 local Stats = game:GetService("Stats")
 local Lighting = game:GetService("Lighting")
@@ -27,17 +27,17 @@ local State = {
 
 local CONFIG_FILE = "mat_config.json"
 
-local function saveConfig()
+local function save()
     local cfg = {}
     for k, v in pairs(State) do cfg[k] = v end
-    pcall(function() writefile(CONFIG_FILE, HttpService:JSONEncode(cfg)) end)
+    pcall(function() writefile(CONFIG_FILE, Http:JSONEncode(cfg)) end)
 end
 
-local function loadConfig()
+local function load()
     if not isfile or not isfile(CONFIG_FILE) then return end
     local ok, raw = pcall(function() return readfile(CONFIG_FILE) end)
     if ok and raw then
-        local ok2, cfg = pcall(function() return HttpService:JSONDecode(raw) end)
+        local ok2, cfg = pcall(Http.JSONDecode, Http, raw)
         if ok2 and cfg then
             for k, v in pairs(cfg) do
                 if State[k] ~= nil then State[k] = v end
@@ -46,63 +46,66 @@ local function loadConfig()
     end
 end
 
-local function getCharacter() return LocalPlayer.Character end
-local function getHumanoid()
-    local char = getCharacter()
-    return char and char:FindFirstChild("Humanoid")
+local function getChar() return LP.Character end
+local function getHum()
+    local c = getChar()
+    return c and c:FindFirstChild("Humanoid")
+end
+local function getHRP()
+    local c = getChar()
+    return c and c:FindFirstChild("HumanoidRootPart")
 end
 
--- ========== SPEED (исправлено) ==========
+-- ========== SPEED ==========
 local function applySpeed()
-    local h = getHumanoid()
-    if h then
-        if State.speedEnabled then
-            h.WalkSpeed = State.walkSpeed
-        else
-            h.WalkSpeed = 16
-        end
-    end
+    local h = getHum()
+    if h then h.WalkSpeed = State.speedEnabled and State.walkSpeed or 16 end
 end
 
 local function toggleSpeed()
     State.speedEnabled = not State.speedEnabled
     applySpeed()
-    saveConfig()
+    save()
 end
 
 local function setSpeed(v)
     State.walkSpeed = v
     applySpeed()
-    saveConfig()
+    save()
 end
 
+LP.CharacterAdded:Connect(function()
+    task.wait(0.5)
+    applySpeed()
+end)
+
 -- ========== INF JUMP ==========
-local infJumpConn = nil
+local infConn = nil
 local function toggleInfJump()
     State.infJumpEnabled = not State.infJumpEnabled
-    if infJumpConn then infJumpConn:Disconnect(); infJumpConn = nil end
+    if infConn then infConn:Disconnect(); infConn = nil end
     if State.infJumpEnabled then
-        infJumpConn = RunService.Heartbeat:Connect(function()
-            local h = getHumanoid()
+        infConn = RunService.Heartbeat:Connect(function()
+            local h = getHum()
             if h and (h:GetState() == Enum.HumanoidStateType.Jumping or h:GetState() == Enum.HumanoidStateType.Freefall) then
                 h:ChangeState(Enum.HumanoidStateType.Jumping)
             end
         end)
     end
-    saveConfig()
+    save()
 end
 
 -- ========== ANTI-RAGDOLL ==========
 local function toggleAntiRagdoll()
     State.antiRagdollEnabled = not State.antiRagdollEnabled
-    saveConfig()
+    save()
 end
 
 RunService.Heartbeat:Connect(function()
     if not State.antiRagdollEnabled then return end
-    local char = getCharacter()
-    if char then
-        local h = char:FindFirstChild("Humanoid")
+    local c = getChar()
+    if c then
+        local h = c:FindFirstChild("Humanoid")
         if h then
             h.AutoRotate = true
             h.PlatformStand = false
@@ -131,19 +134,19 @@ local function toggleOptimize()
             if v:IsA("Fire") or v:IsA("Smoke") or v:IsA("Sparkles") then v.Enabled = true end
         end
     end
-    saveConfig()
+    save()
 end
 
 -- ========== BATLOCK ==========
 local function getClosestPlayer()
-    local hrp = getCharacter() and getCharacter():FindFirstChild("HumanoidRootPart")
+    local hrp = getHRP()
     if not hrp then return nil end
     local closest, dist = nil, math.huge
     for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= LocalPlayer and plr.Character then
-            local targetHRP = plr.Character:FindFirstChild("HumanoidRootPart")
-            if targetHRP then
-                local d = (targetHRP.Position - hrp.Position).Magnitude
+        if plr ~= LP and plr.Character then
+            local t = plr.Character:FindFirstChild("HumanoidRootPart")
+            if t then
+                local d = (t.Position - hrp.Position).Magnitude
                 if d < dist then closest, dist = plr, d end
             end
         end
@@ -153,17 +156,17 @@ end
 
 local function toggleAimbot()
     State.aimbotEnabled = not State.aimbotEnabled
-    saveConfig()
+    save()
 end
 
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if gameProcessed then return end
+UIS.InputBegan:Connect(function(input, gp)
+    if gp then return end
     if (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) and State.aimbotEnabled then
         local target = getClosestPlayer()
         if target and target.Character then
-            local char = getCharacter()
-            if char then
-                local tool = char:FindFirstChildOfClass("Tool")
+            local c = getChar()
+            if c then
+                local tool = c:FindFirstChildOfClass("Tool")
                 if tool then tool:Activate() end
             end
         end
@@ -171,30 +174,28 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 end)
 
 -- ========== ESP ==========
-local espHighlights = {}
+local espList = {}
 local function clearESP()
-    for _, h in ipairs(espHighlights) do
-        if h and h.Parent then h:Destroy() end
-    end
-    espHighlights = {}
+    for _, h in ipairs(espList) do if h and h.Parent then h:Destroy() end end
+    espList = {}
 end
 
 local function updateESP()
     if not State.espEnabled then return end
     clearESP()
     for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= LocalPlayer then
-            local char = plr.Character
-            if char then
+        if plr ~= LP and plr.Character then
+            local c = plr.Character
+            if c then
                 local h = Instance.new("Highlight")
-                h.Adornee = char
+                h.Adornee = c
                 h.FillColor = Color3.fromRGB(255, 100, 175)
                 h.FillTransparency = 0.3
                 h.OutlineColor = Color3.fromRGB(255, 80, 200)
                 h.OutlineTransparency = 0.2
                 h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-                h.Parent = char
-                table.insert(espHighlights, h)
+                h.Parent = c
+                table.insert(espList, h)
             end
         end
     end
@@ -209,7 +210,7 @@ local function toggleESP()
     else
         clearESP()
     end
-    saveConfig()
+    save()
 end
 
 RunService.Heartbeat:Connect(function()
@@ -224,15 +225,15 @@ local function createHUD()
     hudGui.Name = "mat_hud"
     hudGui.Parent = CoreGui
 
-    local frame = Instance.new("Frame", hudGui)
-    frame.Size = UDim2.new(0, 160, 0, 44)
-    frame.Position = UDim2.new(0.5, -80, 0, 10)
-    frame.BackgroundColor3 = Color3.fromRGB(12, 4, 10)
-    frame.BackgroundTransparency = 0.2
-    frame.BorderSizePixel = 0
-    Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 8)
+    local f = Instance.new("Frame", hudGui)
+    f.Size = UDim2.new(0, 160, 0, 44)
+    f.Position = UDim2.new(0.5, -80, 0, 10)
+    f.BackgroundColor3 = Color3.fromRGB(12, 4, 10)
+    f.BackgroundTransparency = 0.2
+    f.BorderSizePixel = 0
+    Instance.new("UICorner", f).CornerRadius = UDim.new(0, 8)
 
-    local title = Instance.new("TextLabel", frame)
+    local title = Instance.new("TextLabel", f)
     title.Size = UDim2.new(1, 0, 0, 14)
     title.Position = UDim2.new(0, 0, 0, 2)
     title.BackgroundTransparency = 1
@@ -242,7 +243,7 @@ local function createHUD()
     title.Text = "mat hub"
     title.TextXAlignment = Enum.TextXAlignment.Center
 
-    local fps = Instance.new("TextLabel", frame)
+    local fps = Instance.new("TextLabel", f)
     fps.Size = UDim2.new(0.5, 0, 0, 14)
     fps.Position = UDim2.new(0, 0, 0, 18)
     fps.BackgroundTransparency = 1
@@ -252,7 +253,7 @@ local function createHUD()
     fps.Text = "FPS: 0"
     fps.TextXAlignment = Enum.TextXAlignment.Center
 
-    local ping = Instance.new("TextLabel", frame)
+    local ping = Instance.new("TextLabel", f)
     ping.Size = UDim2.new(0.5, 0, 0, 14)
     ping.Position = UDim2.new(0.5, 0, 0, 18)
     ping.BackgroundTransparency = 1
@@ -281,298 +282,113 @@ local hudConn = nil
 local function toggleHUD()
     State.hudEnabled = not State.hudEnabled
     if State.hudEnabled then
-        local gui, conn = createHUD()
-        hudConn = conn
+        local g, c = createHUD()
+        hudConn = c
     else
         if hudGui then hudGui:Destroy(); hudGui = nil end
         if hudConn then hudConn:Disconnect(); hudConn = nil end
     end
-    saveConfig()
+    save()
 end
 
--- ========== GUI ==========
+-- ========== GUI (Rayfield) ==========
 local function getGuiParent()
     if gethui then return gethui() end
     return CoreGui
 end
 
-local screenGui
-local mainFrame
-local isOpen = true
-
 local function createMainGUI()
-    screenGui = Instance.new("ScreenGui")
-    screenGui.Name = "mat_hub_gui"
-    screenGui.ResetOnSpawn = false
-    screenGui.Parent = getGuiParent()
-
-    -- Кнопка M
-    local openBtn = Instance.new("TextButton", screenGui)
-    openBtn.Name = "OpenBtn"
-    openBtn.Text = "M"
-    openBtn.TextColor3 = Color3.fromRGB(255, 80, 200)
-    openBtn.Font = Enum.Font.GothamBlack
-    openBtn.TextSize = 24
-    openBtn.BackgroundColor3 = Color3.fromRGB(12, 4, 10)
-    openBtn.BackgroundTransparency = 0.2
-    openBtn.Position = UDim2.new(0.01, 0, 0.2, 0)
-    openBtn.Size = UDim2.new(0, 50, 0, 50)
-    openBtn.Visible = false
-    Instance.new("UICorner", openBtn).CornerRadius = UDim.new(1, 0)
-    local stroke = Instance.new("UIStroke", openBtn)
-    stroke.Color = Color3.fromRGB(220, 40, 160)
-    stroke.Thickness = 2
-
-    openBtn.MouseButton1Click:Connect(function()
-        mainFrame.Visible = true
-        openBtn.Visible = false
-        isOpen = true
-    end)
-
-    -- Основное окно
-    mainFrame = Instance.new("Frame", screenGui)
-    mainFrame.Size = UDim2.new(0, 340, 0, 440)
-    mainFrame.Position = UDim2.new(0.5, -170, 0.5, -220)
-    mainFrame.BackgroundColor3 = Color3.fromRGB(12, 4, 10)
-    mainFrame.BackgroundTransparency = 0.1
-    mainFrame.BorderSizePixel = 0
-    Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 16)
-    local mainStroke = Instance.new("UIStroke", mainFrame)
-    mainStroke.Color = Color3.fromRGB(220, 40, 160)
-    mainStroke.Thickness = 1.5
-    mainStroke.Transparency = 0.3
-
-    local title = Instance.new("TextLabel", mainFrame)
-    title.Size = UDim2.new(1, 0, 0, 40)
-    title.BackgroundTransparency = 1
-    title.Font = Enum.Font.GothamBlack
-    title.TextSize = 18
-    title.TextColor3 = Color3.fromRGB(255, 80, 200)
-    title.Text = "mat hub"
-    title.TextXAlignment = Enum.TextXAlignment.Center
-
-    local closeBtn = Instance.new("TextButton", mainFrame)
-    closeBtn.Size = UDim2.new(0, 30, 0, 30)
-    closeBtn.Position = UDim2.new(1, -35, 0, 5)
-    closeBtn.BackgroundColor3 = Color3.fromRGB(160, 120, 145)
-    closeBtn.BackgroundTransparency = 0.2
-    closeBtn.BorderSizePixel = 0
-    Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 6)
-    closeBtn.Text = "✕"
-    closeBtn.TextSize = 16
-    closeBtn.TextColor3 = Color3.fromRGB(245, 235, 242)
-    closeBtn.MouseButton1Click:Connect(function()
-        mainFrame.Visible = false
-        openBtn.Visible = true
-        isOpen = false
-    end)
-
-    local content = Instance.new("ScrollingFrame", mainFrame)
-    content.Size = UDim2.new(1, -20, 1, -50)
-    content.Position = UDim2.new(0, 10, 0, 45)
-    content.BackgroundTransparency = 1
-    content.ScrollBarThickness = 3
-    content.ScrollBarImageColor3 = Color3.fromRGB(220, 40, 160)
-    content.AutomaticCanvasSize = Enum.AutomaticSize.Y
-
-    local layout = Instance.new("UIListLayout", content)
-    layout.Padding = UDim.new(0, 8)
-
-    -- Функция для переключателей
-    local function createToggle(label, defaultValue, callback)
-        local frame = Instance.new("Frame", content)
-        frame.Size = UDim2.new(1, 0, 0, 45)
-        frame.BackgroundColor3 = Color3.fromRGB(34, 14, 27)
-        frame.BackgroundTransparency = 0.3
-        Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 8)
-
-        local lbl = Instance.new("TextLabel", frame)
-        lbl.Size = UDim2.new(0.55, 0, 1, 0)
-        lbl.Position = UDim2.new(0.04, 0, 0, 0)
-        lbl.BackgroundTransparency = 1
-        lbl.Font = Enum.Font.GothamBold
-        lbl.TextSize = 14
-        lbl.TextColor3 = Color3.fromRGB(245, 235, 242)
-        lbl.Text = label
-        lbl.TextXAlignment = Enum.TextXAlignment.Left
-
-        local btn = Instance.new("TextButton", frame)
-        btn.Size = UDim2.new(0, 70, 0, 30)
-        btn.Position = UDim2.new(1, -78, 0.5, -15)
-        btn.BackgroundColor3 = defaultValue and Color3.fromRGB(100, 255, 180) or Color3.fromRGB(160, 120, 145)
-        btn.BorderSizePixel = 0
-        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
-        btn.Text = defaultValue and "ON" or "OFF"
-        btn.TextSize = 12
-        btn.TextColor3 = Color3.fromRGB(245, 235, 242)
-        btn.Font = Enum.Font.GothamBold
-
-        local state = defaultValue
-        btn.MouseButton1Click:Connect(function()
-            state = not state
-            btn.BackgroundColor3 = state and Color3.fromRGB(100, 255, 180) or Color3.fromRGB(160, 120, 145)
-            btn.Text = state and "ON" or "OFF"
-            callback(state)
-        end)
+    if not Rayfield then
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/shlexware/Rayfield/main/source.lua"))()
     end
 
-    -- Функция для ползунка (работает на телефоне)
-    local function createSlider(label, min, max, defaultValue, callback)
-        local frame = Instance.new("Frame", content)
-        frame.Size = UDim2.new(1, 0, 0, 60)
-        frame.BackgroundColor3 = Color3.fromRGB(34, 14, 27)
-        frame.BackgroundTransparency = 0.3
-        Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 8)
+    local Win = Rayfield:CreateWindow({
+        Name = "mat hub",
+        LoadingTitle = "Загрузка...",
+        LoadingSubtitle = "by matspeqa",
+        ConfigurationSaving = { Enabled = true, FolderName = "mat_hub", FileName = "Config" },
+        KeySystem = false
+    })
 
-        local lbl = Instance.new("TextLabel", frame)
-        lbl.Size = UDim2.new(0.7, 0, 0, 18)
-        lbl.Position = UDim2.new(0.04, 0, 0.05, 0)
-        lbl.BackgroundTransparency = 1
-        lbl.Font = Enum.Font.GothamBold
-        lbl.TextSize = 14
-        lbl.TextColor3 = Color3.fromRGB(245, 235, 242)
-        lbl.Text = label .. " (" .. defaultValue .. ")"
-        lbl.TextXAlignment = Enum.TextXAlignment.Left
+    local Main = Win:CreateTab("Основные", nil)
+    Main:CreateSection("Движение")
 
-        local valueLbl = Instance.new("TextLabel", frame)
-        valueLbl.Size = UDim2.new(0, 40, 0, 18)
-        valueLbl.Position = UDim2.new(1, -45, 0.05, 0)
-        valueLbl.BackgroundTransparency = 1
-        valueLbl.Font = Enum.Font.GothamBold
-        valueLbl.TextSize = 14
-        valueLbl.TextColor3 = Color3.fromRGB(220, 40, 160)
-        valueLbl.Text = tostring(defaultValue)
-        valueLbl.TextXAlignment = Enum.TextXAlignment.Right
-
-        -- Дорожка ползунка
-        local track = Instance.new("TextButton", frame)
-        track.Size = UDim2.new(0.92, 0, 0, 8)
-        track.Position = UDim2.new(0.04, 0, 0.65, 0)
-        track.BackgroundColor3 = Color3.fromRGB(12, 4, 10)
-        track.BorderSizePixel = 0
-        track.AutoButtonColor = false
-        Instance.new("UICorner", track).CornerRadius = UDim.new(0, 4)
-
-        local fill = Instance.new("Frame", track)
-        fill.Size = UDim2.new((defaultValue - min) / (max - min), 0, 1, 0)
-        fill.BackgroundColor3 = Color3.fromRGB(220, 40, 160)
-        fill.BorderSizePixel = 0
-        Instance.new("UICorner", fill).CornerRadius = UDim.new(0, 4)
-
-        local dragging = false
-        local currentValue = defaultValue
-
-        local function updateSlider(inputPos)
-            local absX = track.AbsolutePosition.X
-            local sizeX = track.AbsoluteSize.X
-            local pct = math.clamp((inputPos - absX) / sizeX, 0, 1)
-            local val = math.floor(min + (max - min) * pct)
-            fill.Size = UDim2.new(pct, 0, 1, 0)
-            lbl.Text = label .. " (" .. val .. ")"
-            valueLbl.Text = tostring(val)
-            currentValue = val
-            callback(val)
+    Main:CreateToggle({
+        Name = "Скорость",
+        CurrentValue = State.speedEnabled,
+        Callback = function(v)
+            State.speedEnabled = v
+            toggleSpeed()
         end
+    })
 
-        track.MouseButton1Down:Connect(function()
-            dragging = true
-            updateSlider(UserInputService:GetMouseLocation().X)
-        end)
-
-        track.MouseButton1Up:Connect(function()
-            dragging = false
-        end)
-
-        track.MouseLeave:Connect(function()
-            dragging = false
-        end)
-
-        track.MouseMove:Connect(function()
-            if dragging then
-                updateSlider(UserInputService:GetMouseLocation().X)
-            end
-        end)
-
-        -- Для тач-экранов
-        track.TouchBegan:Connect(function(touch)
-            if touch then
-                dragging = true
-                updateSlider(touch.Position.X)
-            end
-        end)
-
-        track.TouchMoved:Connect(function(touch)
-            if touch and dragging then
-                updateSlider(touch.Position.X)
-            end
-        end)
-
-        track.TouchEnded:Connect(function()
-            dragging = false
-        end)
-
-        track.TouchCancelled:Connect(function()
-            dragging = false
-        end)
-    end
-
-    -- Создаём элементы меню
-    createToggle("Скорость", State.speedEnabled, function(v)
-        State.speedEnabled = v
-        toggleSpeed()
-    end)
-
-    createSlider("Скорость", 16, 120, State.walkSpeed, function(v)
-        setSpeed(v)
-    end)
-
-    createToggle("Inf Jump", State.infJumpEnabled, function(v)
-        State.infJumpEnabled = v
-        toggleInfJump()
-    end)
-
-    createToggle("Anti-Ragdoll", State.antiRagdollEnabled, function(v)
-        State.antiRagdollEnabled = v
-        toggleAntiRagdoll()
-    end)
-
-    createToggle("BatLock (аимбот)", State.aimbotEnabled, function(v)
-        State.aimbotEnabled = v
-        toggleAimbot()
-    end)
-
-    createToggle("Player ESP", State.espEnabled, function(v)
-        State.espEnabled = v
-        toggleESP()
-    end)
-
-    createToggle("HUD (FPS/Ping)", State.hudEnabled, function(v)
-        State.hudEnabled = v
-        toggleHUD()
-    end)
-
-    createToggle("Оптимизация FPS", State.optimizeEnabled, function(v)
-        State.optimizeEnabled = v
-        toggleOptimize()
-    end)
-
-    UserInputService.InputBegan:Connect(function(input, gameProcessed)
-        if gameProcessed then return end
-        if input.KeyCode == Enum.KeyCode.RightBracket then
-            if isOpen then
-                mainFrame.Visible = false
-                openBtn.Visible = true
-                isOpen = false
-            else
-                mainFrame.Visible = true
-                openBtn.Visible = false
-                isOpen = true
-            end
+    Main:CreateSlider({
+        Name = "Скорость",
+        Range = { 16, 120 },
+        Increment = 1,
+        Suffix = "Speed",
+        CurrentValue = State.walkSpeed,
+        Callback = function(v)
+            setSpeed(v)
         end
-    end)
+    })
+
+    Main:CreateToggle({
+        Name = "Inf Jump",
+        CurrentValue = State.infJumpEnabled,
+        Callback = function(v)
+            State.infJumpEnabled = v
+            toggleInfJump()
+        end
+    })
+
+    Main:CreateToggle({
+        Name = "Anti-Ragdoll",
+        CurrentValue = State.antiRagdollEnabled,
+        Callback = function(v)
+            State.antiRagdollEnabled = v
+            toggleAntiRagdoll()
+        end
+    })
+
+    Main:CreateToggle({
+        Name = "Aimbot (BatLock)",
+        CurrentValue = State.aimbotEnabled,
+        Callback = function(v)
+            State.aimbotEnabled = v
+            toggleAimbot()
+        end
+    })
+
+    Main:CreateToggle({
+        Name = "Player ESP",
+        CurrentValue = State.espEnabled,
+        Callback = function(v)
+            State.espEnabled = v
+            toggleESP()
+        end
+    })
+
+    Main:CreateToggle({
+        Name = "HUD (FPS/Ping)",
+        CurrentValue = State.hudEnabled,
+        Callback = function(v)
+            State.hudEnabled = v
+            toggleHUD()
+        end
+    })
+
+    Main:CreateToggle({
+        Name = "Оптимизация FPS",
+        CurrentValue = State.optimizeEnabled,
+        Callback = function(v)
+            State.optimizeEnabled = v
+            toggleOptimize()
+        end
+    })
 end
 
-loadConfig()
+load()
 createMainGUI()
 
 if State.speedEnabled then toggleSpeed() end
@@ -586,18 +402,18 @@ if State.optimizeEnabled then toggleOptimize() end
 local splash = Instance.new("ScreenGui")
 splash.Name = "mat_splash"
 splash.Parent = CoreGui
-local frame = Instance.new("Frame", splash)
-frame.Size = UDim2.new(0, 280, 0, 60)
-frame.Position = UDim2.new(0.5, -140, 0.85, 0)
-frame.BackgroundColor3 = Color3.fromRGB(12, 4, 10)
-frame.BackgroundTransparency = 0.15
-Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 12)
-local label = Instance.new("TextLabel", frame)
-label.Size = UDim2.new(1, 0, 1, 0)
-label.BackgroundTransparency = 1
-label.Font = Enum.Font.GothamBold
-label.TextSize = 18
-label.TextColor3 = Color3.fromRGB(255, 80, 200)
-label.Text = "mat hub loaded!"
+local f = Instance.new("Frame", splash)
+f.Size = UDim2.new(0, 280, 0, 60)
+f.Position = UDim2.new(0.5, -140, 0.85, 0)
+f.BackgroundColor3 = Color3.fromRGB(12, 4, 10)
+f.BackgroundTransparency = 0.15
+Instance.new("UICorner", f).CornerRadius = UDim.new(0, 12)
+local l = Instance.new("TextLabel", f)
+l.Size = UDim2.new(1, 0, 1, 0)
+l.BackgroundTransparency = 1
+l.Font = Enum.Font.GothamBold
+l.TextSize = 18
+l.TextColor3 = Color3.fromRGB(255, 80, 200)
+l.Text = "mat hub loaded!"
 task.wait(2)
 splash:Destroy()

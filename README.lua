@@ -1,4 +1,4 @@
--- mat hub (фикс: ползунок Speed виден и работает на телефоне)
+-- mat hub (фикс: ползунок Speed теперь реально меняет скорость)
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -52,11 +52,15 @@ local function getHumanoid()
     return char and char:FindFirstChild("Humanoid")
 end
 
--- ========== SPEED ==========
+-- ========== SPEED (исправлено) ==========
 local function applySpeed()
     local h = getHumanoid()
     if h then
-        h.WalkSpeed = State.speedEnabled and State.walkSpeed or 16
+        if State.speedEnabled then
+            h.WalkSpeed = State.walkSpeed
+        else
+            h.WalkSpeed = 16
+        end
     end
 end
 
@@ -286,7 +290,7 @@ local function toggleHUD()
     saveConfig()
 end
 
--- ========== GUI (ползунок исправлен для телефона) ==========
+-- ========== GUI ==========
 local function getGuiParent()
     if gethui then return gethui() end
     return CoreGui
@@ -412,7 +416,7 @@ local function createMainGUI()
         end)
     end
 
-    -- Функция для ползунка (работает на телефоне через TextButton)
+    -- Функция для ползунка (работает на телефоне)
     local function createSlider(label, min, max, defaultValue, callback)
         local frame = Instance.new("Frame", content)
         frame.Size = UDim2.new(1, 0, 0, 60)
@@ -440,7 +444,7 @@ local function createMainGUI()
         valueLbl.Text = tostring(defaultValue)
         valueLbl.TextXAlignment = Enum.TextXAlignment.Right
 
-        -- Дорожка ползунка (TextButton, чтобы реагировал на тап)
+        -- Дорожка ползунка
         local track = Instance.new("TextButton", frame)
         track.Size = UDim2.new(0.92, 0, 0, 8)
         track.Position = UDim2.new(0.04, 0, 0.65, 0)

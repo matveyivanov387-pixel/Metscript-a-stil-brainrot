@@ -8,7 +8,6 @@ local HttpService = game:GetService("HttpService")
 local CoreGui = game:GetService("CoreGui")
 local Stats = game:GetService("Stats")
 local Lighting = game:GetService("Lighting")
-local TweenService = game:GetService("TweenService")
 
 pcall(function()
     if CoreGui:FindFirstChild("mat_hub_gui") then CoreGui.mat_hub_gui:Destroy() end
@@ -47,9 +46,7 @@ local State = {
 local CONFIG_FILE = "mat_hub_v3_config.json"
 local function saveConfig()
     local cfg = {}
-    for k, v in pairs(State) do
-        cfg[k] = v
-    end
+    for k, v in pairs(State) do cfg[k] = v end
     pcall(function() writefile(CONFIG_FILE, HttpService:JSONEncode(cfg)) end)
 end
 
@@ -74,7 +71,7 @@ local function getHumanoid()
     return char and char:FindFirstChild("Humanoid")
 end
 
--- ========== SPEED (Chiraq) ==========
+-- ========== SPEED ==========
 local function getWalkSpeed()
     local char = getCharacter()
     local isStealing = LocalPlayer:GetAttribute("Stealing") ~= nil
@@ -135,7 +132,7 @@ UserInputService.JumpRequest:Connect(function()
     end
 end)
 
--- ========== ANTI-RAGDOLL (Chiraq) ==========
+-- ========== ANTI-RAGDOLL ==========
 local function toggleAntiRagdoll()
     State.antiRagdollEnabled = not State.antiRagdollEnabled
     saveConfig()
@@ -227,7 +224,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
     end
 end)
 
--- ========== ESP (Chiraq, с DepthMode AlwaysOnTop) ==========
+-- ========== ESP ==========
 local espHighlights, espConnections = {}, {}
 
 local function clearESP()
@@ -403,8 +400,7 @@ local function getGuiParent()
     return CoreGui
 end
 
-local screenGui, mainFrame
-local isOpen = true
+local screenGui, mainFrame, openBtn
 
 local function createMainGUI()
     screenGui = Instance.new("ScreenGui")
@@ -412,42 +408,45 @@ local function createMainGUI()
     screenGui.ResetOnSpawn = false
     screenGui.Parent = getGuiParent()
 
-    local openBtn = Instance.new("TextButton", screenGui)
+    -- Плавающая кнопка "M" (всегда видна)
+    openBtn = Instance.new("TextButton", screenGui)
     openBtn.Name = "OpenBtn"
     openBtn.Text = "M"
     openBtn.TextColor3 = C.AccentGlow
     openBtn.Font = Enum.Font.GothamBlack
-    openBtn.TextSize = 24
+    openBtn.TextSize = 28
     openBtn.BackgroundColor3 = C.BGDeep
-    openBtn.BackgroundTransparency = 0.2
-    openBtn.Position = UDim2.new(0.01,0,0.2,0)
-    openBtn.Size = UDim2.new(0,50,0,50)
-    openBtn.Visible = false
-    Instance.new("UICorner", openBtn).CornerRadius = UDim.new(1,0)
+    openBtn.BackgroundTransparency = 0.1
+    openBtn.Position = UDim2.new(0.01, 0, 0.2, 0)
+    openBtn.Size = UDim2.new(0, 55, 0, 55)
+    openBtn.ZIndex = 999
+    Instance.new("UICorner", openBtn).CornerRadius = UDim.new(1, 0)
     local stroke = Instance.new("UIStroke", openBtn)
     stroke.Color = C.Accent
     stroke.Thickness = 2
 
     openBtn.MouseButton1Click:Connect(function()
-        mainFrame.Visible = true
-        openBtn.Visible = false
-        isOpen = true
+        if mainFrame then
+            mainFrame.Visible = not mainFrame.Visible
+        end
     end)
 
+    -- Основное меню
     mainFrame = Instance.new("Frame", screenGui)
-    mainFrame.Size = UDim2.new(0,340,0,440)
-    mainFrame.Position = UDim2.new(0.5,-170,0.5,-220)
+    mainFrame.Size = UDim2.new(0, 340, 0, 440)
+    mainFrame.Position = UDim2.new(0.5, -170, 0.5, -220)
     mainFrame.BackgroundColor3 = C.BGDeep
     mainFrame.BackgroundTransparency = 0.1
     mainFrame.BorderSizePixel = 0
-    Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0,16)
+    mainFrame.ZIndex = 100
+    Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 16)
     local mainStroke = Instance.new("UIStroke", mainFrame)
     mainStroke.Color = C.Accent
     mainStroke.Thickness = 1.5
     mainStroke.Transparency = 0.3
 
     local title = Instance.new("TextLabel", mainFrame)
-    title.Size = UDim2.new(1,0,0,40)
+    title.Size = UDim2.new(1, 0, 0, 40)
     title.BackgroundTransparency = 1
     title.Font = Enum.Font.GothamBlack
     title.TextSize = 18
@@ -456,46 +455,43 @@ local function createMainGUI()
     title.TextXAlignment = Enum.TextXAlignment.Center
 
     local closeBtn = Instance.new("TextButton", mainFrame)
-    closeBtn.Size = UDim2.new(0,30,0,30)
-    closeBtn.Position = UDim2.new(1,-35,0,5)
+    closeBtn.Size = UDim2.new(0, 30, 0, 30)
+    closeBtn.Position = UDim2.new(1, -35, 0, 5)
     closeBtn.BackgroundColor3 = C.StateOff
     closeBtn.BackgroundTransparency = 0.2
     closeBtn.BorderSizePixel = 0
-    Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0,6)
+    Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 6)
     closeBtn.Text = "✕"
     closeBtn.TextSize = 16
     closeBtn.TextColor3 = C.TextPrimary
     closeBtn.MouseButton1Click:Connect(function()
         mainFrame.Visible = false
-        openBtn.Visible = true
-        isOpen = false
     end)
 
     local tabBar = Instance.new("Frame", mainFrame)
-    tabBar.Size = UDim2.new(1,-20,0,30)
-    tabBar.Position = UDim2.new(0,10,0,45)
+    tabBar.Size = UDim2.new(1, -20, 0, 30)
+    tabBar.Position = UDim2.new(0, 10, 0, 45)
     tabBar.BackgroundColor3 = C.BGSurface
     tabBar.BackgroundTransparency = 0.5
-    Instance.new("UICorner", tabBar).CornerRadius = UDim.new(0,6)
+    Instance.new("UICorner", tabBar).CornerRadius = UDim.new(0, 6)
 
     local tabs = {"Кража", "Мувмент", "Визуал", "Прочее"}
     local tabButtons, tabContents = {}, {}
 
     for i, name in ipairs(tabs) do
         local btn = Instance.new("TextButton", tabBar)
-        btn.Size = UDim2.new(0.25,0,1,0)
-        btn.Position = UDim2.new((i-1)*0.25,0,0,0)
+        btn.Size = UDim2.new(0.25, 0, 1, 0)
+        btn.Position = UDim2.new((i-1) * 0.25, 0, 0, 0)
         btn.BackgroundTransparency = 1
         btn.Font = Enum.Font.GothamBold
         btn.TextSize = 11
         btn.TextColor3 = C.TextSub
         btn.Text = name
-        btn.Name = name .. "_tab"
         table.insert(tabButtons, btn)
 
         local content = Instance.new("ScrollingFrame", mainFrame)
-        content.Size = UDim2.new(1,-20,1,-100)
-        content.Position = UDim2.new(0,10,0,80)
+        content.Size = UDim2.new(1, -20, 1, -100)
+        content.Position = UDim2.new(0, 10, 0, 80)
         content.BackgroundTransparency = 1
         content.ScrollBarThickness = 3
         content.ScrollBarImageColor3 = C.Accent
@@ -514,14 +510,14 @@ local function createMainGUI()
 
     local function createToggle(parent, label, defaultValue, callback)
         local frame = Instance.new("Frame", parent)
-        frame.Size = UDim2.new(1,0,0,40)
+        frame.Size = UDim2.new(1, 0, 0, 40)
         frame.BackgroundColor3 = C.BGSurface
         frame.BackgroundTransparency = 0.3
-        Instance.new("UICorner", frame).CornerRadius = UDim.new(0,8)
+        Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 8)
 
         local lbl = Instance.new("TextLabel", frame)
-        lbl.Size = UDim2.new(0.55,0,1,0)
-        lbl.Position = UDim2.new(0.04,0,0,0)
+        lbl.Size = UDim2.new(0.55, 0, 1, 0)
+        lbl.Position = UDim2.new(0.04, 0, 0, 0)
         lbl.BackgroundTransparency = 1
         lbl.Font = Enum.Font.GothamBold
         lbl.TextSize = 13
@@ -530,11 +526,11 @@ local function createMainGUI()
         lbl.TextXAlignment = Enum.TextXAlignment.Left
 
         local btn = Instance.new("TextButton", frame)
-        btn.Size = UDim2.new(0,65,0,28)
-        btn.Position = UDim2.new(1,-75,0.5,-14)
+        btn.Size = UDim2.new(0, 65, 0, 28)
+        btn.Position = UDim2.new(1, -75, 0.5, -14)
         btn.BackgroundColor3 = defaultValue and C.StateOn or C.StateOff
         btn.BorderSizePixel = 0
-        Instance.new("UICorner", btn).CornerRadius = UDim.new(0,6)
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
         btn.Text = defaultValue and "ON" or "OFF"
         btn.TextSize = 11
         btn.TextColor3 = C.TextPrimary
@@ -551,14 +547,14 @@ local function createMainGUI()
 
     local function createSlider(parent, label, min, max, defaultValue, callback)
         local frame = Instance.new("Frame", parent)
-        frame.Size = UDim2.new(1,0,0,55)
+        frame.Size = UDim2.new(1, 0, 0, 55)
         frame.BackgroundColor3 = C.BGSurface
         frame.BackgroundTransparency = 0.3
-        Instance.new("UICorner", frame).CornerRadius = UDim.new(0,8)
+        Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 8)
 
         local lbl = Instance.new("TextLabel", frame)
-        lbl.Size = UDim2.new(1,0,0,18)
-        lbl.Position = UDim2.new(0.04,0,0.05,0)
+        lbl.Size = UDim2.new(1, 0, 0, 18)
+        lbl.Position = UDim2.new(0.04, 0, 0.05, 0)
         lbl.BackgroundTransparency = 1
         lbl.Font = Enum.Font.GothamBold
         lbl.TextSize = 13
@@ -567,4 +563,5 @@ local function createMainGUI()
         lbl.TextXAlignment = Enum.TextXAlignment.Left
 
         local valueLbl = Instance.new("TextLabel", frame)
-        valueLbl.Size = UDim2.new
+        valueLbl.Size = UDim2.new(0, 50, 0, 18)
+        valueLbl.Position = UDim2.new(1, -

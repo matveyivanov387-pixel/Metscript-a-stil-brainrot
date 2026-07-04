@@ -1,4 +1,4 @@
--- met hub для Steal a Brainrot (Speed + Aimbot + Inf Jump + ESP Brainrot)
+-- mat hub for Steal a Brainrot
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -32,17 +32,11 @@ local connections = {
     esp = nil,
 }
 
--- ФУНКЦИИ
-
-local function getCharacter()
-    return LocalPlayer.Character
-end
-
+local function getCharacter() return LocalPlayer.Character end
 local function getHRP()
     local char = getCharacter()
     return char and char:FindFirstChild("HumanoidRootPart")
 end
-
 local function getHumanoid()
     local char = getCharacter()
     return char and char:FindFirstChild("Humanoid")
@@ -82,8 +76,7 @@ local function toggleInfJump()
     end
 end
 
--- Aimbot (наведение на игроков + авто-удар)
-local aimbotTarget = nil
+-- Aimbot
 local function getClosestPlayer()
     local hrp = getHRP()
     if not hrp then return nil end
@@ -112,7 +105,8 @@ local function getMostExpensiveBrainrot()
     local maxPrice = 0
     for _, v in ipairs(workspace:GetDescendants()) do
         if v:IsA("Model") and v:FindFirstChild("PriceTag") then
-            local price = tonumber(v.PriceTag.Text:gsub("[^0-9]", "")) or 0
+            local priceText = v.PriceTag.Text or "0"
+            local price = tonumber(priceText:gsub("[^0-9]", "")) or 0
             if price > maxPrice then
                 maxPrice = price
                 mostExpensive = v
@@ -133,8 +127,9 @@ end
 
 local function updateESP()
     clearESP()
+    if not State.espEnabled then return end
     local target = getMostExpensiveBrainrot()
-    if target and State.espEnabled then
+    if target then
         local highlight = Instance.new("Highlight")
         highlight.Adornee = target
         highlight.FillColor = C.ESPPink
@@ -153,73 +148,123 @@ local function toggleESP()
     end
 end
 
--- GUI (меню)
-
+-- GUI
 local function getGuiParent()
     if gethui then return gethui() end
     if game.CoreGui then return game.CoreGui end
     return LocalPlayer:WaitForChild("PlayerGui")
 end
 
+-- Снежинки
+local function createSnowParticles(parent)
+    local particles = {}
+    for i = 1, 30 do
+        local frame = Instance.new("Frame", parent)
+        frame.Size = UDim2.new(0, math.random(2, 5), 0, math.random(2, 5))
+        frame.Position = UDim2.new(math.random() * 0.9, 0, math.random() * 0.8, 0)
+        frame.BackgroundColor3 = Color3.new(1, 1, 1)
+        frame.BackgroundTransparency = 0.5
+        frame.BorderSizePixel = 0
+        frame.Rotation = math.random(-30, 30)
+        frame.ZIndex = 0
+        local info = {
+            speed = math.random(2, 5) / 10,
+            fall = math.random(2, 5) / 10,
+            startX = frame.Position.X.Scale,
+            startY = frame.Position.Y.Scale,
+            particle = frame,
+            rotSpeed = math.random(-2, 2) / 5,
+        }
+        table.insert(particles, info)
+    end
+    local conn
+    conn = RunService.RenderStepped:Connect(function(dt)
+        for _, p in ipairs(particles) do
+            p.particle.Position = UDim2.new(
+                p.startX + math.sin(tick() * p.speed + p.particle.Rotation) * 0.1,
+                0,
+                p.startY + (tick() * p.fall % 0.8) - 0.2,
+                0
+            )
+            p.particle.Rotation = p.particle.Rotation + p.rotSpeed
+        end
+    end)
+    return conn
+end
+
+local screenGui
+local mainFrame
 local function createMainGUI()
-    local screenGui = Instance.new("ScreenGui")
-    screenGui.Name = "met_hub_gui"
+    screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "mat_hub_gui"
     screenGui.ResetOnSpawn = false
     screenGui.Parent = getGuiParent()
 
-    local mainFrame = Instance.new("Frame", screenGui)
-    mainFrame.Size = UDim2.new(0, 300, 0, 250)
-    mainFrame.Position = UDim2.new(0.5, -150, 0.5, -125)
+    mainFrame = Instance.new("Frame", screenGui)
+    mainFrame.Size = UDim2.new(0, 320, 0, 280)
+    mainFrame.Position = UDim2.new(0.5, -160, 0.5, -140)
     mainFrame.BackgroundColor3 = C.BGDeep
     mainFrame.BackgroundTransparency = 0.1
     mainFrame.BorderSizePixel = 0
-    Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 12)
+    Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 16)
+
+    -- Снежинки
+    local snowContainer = Instance.new("Frame", mainFrame)
+    snowContainer.Size = UDim2.new(1, 0, 1, 0)
+    snowContainer.BackgroundTransparency = 1
+    snowContainer.ZIndex = 0
+    createSnowParticles(snowContainer)
 
     local title = Instance.new("TextLabel", mainFrame)
-    title.Size = UDim2.new(1, 0, 0, 30)
+    title.Size = UDim2.new(1, 0, 0, 35)
+    title.Position = UDim2.new(0, 0, 0, 0)
     title.BackgroundTransparency = 1
     title.Font = Enum.Font.GothamBold
-    title.TextSize = 18
+    title.TextSize = 20
     title.TextColor3 = C.AccentGlow
-    title.Text = "met hub"
+    title.Text = "mat hub"
     title.TextXAlignment = Enum.TextXAlignment.Center
+    title.ZIndex = 2
 
     local closeBtn = Instance.new("TextButton", mainFrame)
-    closeBtn.Size = UDim2.new(0, 25, 0, 25)
-    closeBtn.Position = UDim2.new(1, -30, 0, 3)
+    closeBtn.Size = UDim2.new(0, 28, 0, 28)
+    closeBtn.Position = UDim2.new(1, -34, 0, 4)
     closeBtn.BackgroundColor3 = C.StateOff
+    closeBtn.BackgroundTransparency = 0.2
     closeBtn.BorderSizePixel = 0
     Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 6)
     closeBtn.Text = "✕"
     closeBtn.TextSize = 14
     closeBtn.TextColor3 = C.TextPrimary
+    closeBtn.ZIndex = 2
     closeBtn.MouseButton1Click:Connect(function()
-        screenGui:Destroy()
+        screenGui.Enabled = false
     end)
 
     local content = Instance.new("Frame", mainFrame)
-    content.Size = UDim2.new(1, -20, 1, -40)
-    content.Position = UDim2.new(0, 10, 0, 35)
+    content.Size = UDim2.new(1, -20, 1, -45)
+    content.Position = UDim2.new(0, 10, 0, 40)
     content.BackgroundTransparency = 1
+    content.ZIndex = 2
 
     local function createToggle(label, key, value, callback)
         local frame = Instance.new("Frame", content)
         frame.Size = UDim2.new(1, 0, 0, 30)
-        frame.Position = UDim2.new(0, 0, 0, #content:GetChildren() * 32)
+        frame.Position = UDim2.new(0, 0, 0, #content:GetChildren() * 35)
         frame.BackgroundTransparency = 1
 
         local lbl = Instance.new("TextLabel", frame)
         lbl.Size = UDim2.new(0.6, 0, 1, 0)
         lbl.BackgroundTransparency = 1
         lbl.Font = Enum.Font.Gotham
-        lbl.TextSize = 12
+        lbl.TextSize = 13
         lbl.TextColor3 = C.TextPrimary
         lbl.Text = label
         lbl.TextXAlignment = Enum.TextXAlignment.Left
 
         local btn = Instance.new("TextButton", frame)
-        btn.Size = UDim2.new(0, 60, 0, 26)
-        btn.Position = UDim2.new(1, -65, 0, 2)
+        btn.Size = UDim2.new(0, 65, 0, 26)
+        btn.Position = UDim2.new(1, -70, 0, 2)
         btn.BackgroundColor3 = value and C.StateOn or C.BGSurface
         btn.BorderSizePixel = 0
         Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
@@ -240,24 +285,24 @@ local function createMainGUI()
     local function createSlider(label, min, max, default, callback)
         local frame = Instance.new("Frame", content)
         frame.Size = UDim2.new(1, 0, 0, 40)
-        frame.Position = UDim2.new(0, 0, 0, #content:GetChildren() * 42)
+        frame.Position = UDim2.new(0, 0, 0, #content:GetChildren() * 35 + 10)
         frame.BackgroundTransparency = 1
 
         local lbl = Instance.new("TextLabel", frame)
-        lbl.Size = UDim2.new(1, 0, 0, 18)
+        lbl.Size = UDim2.new(0.7, 0, 0, 18)
         lbl.BackgroundTransparency = 1
         lbl.Font = Enum.Font.Gotham
-        lbl.TextSize = 12
+        lbl.TextSize = 13
         lbl.TextColor3 = C.TextPrimary
         lbl.Text = label .. " (" .. default .. ")"
         lbl.TextXAlignment = Enum.TextXAlignment.Left
 
         local valueLabel = Instance.new("TextLabel", frame)
-        valueLabel.Size = UDim2.new(0, 40, 0, 18)
-        valueLabel.Position = UDim2.new(1, -45, 0, 0)
+        valueLabel.Size = UDim2.new(0, 50, 0, 18)
+        valueLabel.Position = UDim2.new(1, -55, 0, 0)
         valueLabel.BackgroundTransparency = 1
         valueLabel.Font = Enum.Font.GothamBold
-        valueLabel.TextSize = 12
+        valueLabel.TextSize = 14
         valueLabel.TextColor3 = C.Accent
         valueLabel.Text = tostring(default)
         valueLabel.TextXAlignment = Enum.TextXAlignment.Right
@@ -276,12 +321,8 @@ local function createMainGUI()
         Instance.new("UICorner", fill).CornerRadius = UDim.new(0, 4)
 
         local dragging = false
-        slider.MouseButton1Down:Connect(function()
-            dragging = true
-        end)
-        slider.MouseButton1Up:Connect(function()
-            dragging = false
-        end)
+        slider.MouseButton1Down:Connect(function() dragging = true end)
+        slider.MouseButton1Up:Connect(function() dragging = false end)
         UserInputService.InputChanged:Connect(function(input)
             if not dragging or input.UserInputType ~= Enum.UserInputType.MouseMovement then return end
             local pos = input.Position.X
@@ -317,9 +358,15 @@ local function createMainGUI()
     createToggle("ESP (дорогой брейнрот)", "esp", State.espEnabled, function(v)
         toggleESP()
     end)
+
+    UserInputService.InputBegan:Connect(function(input, gameProcessed)
+        if gameProcessed then return end
+        if input.KeyCode == Enum.KeyCode.RightBracket then
+            screenGui.Enabled = not screenGui.Enabled
+        end
+    end)
 end
 
--- Aimbot логика (авто-удар при зажатой левой кнопке мыши)
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
     if input.UserInputType == Enum.UserInputType.MouseButton1 and State.aimbotEnabled then
@@ -343,27 +390,21 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
     end
 end)
 
--- Обновление ESP при изменении объектов
-if connections.esp then
-    connections.esp:Disconnect()
-    connections.esp = nil
-end
+if connections.esp then connections.esp:Disconnect() end
 connections.esp = RunService.Heartbeat:Connect(function()
     if State.espEnabled then
         updateESP()
     end
 end)
 
--- Запуск GUI
 createMainGUI()
 
--- Splash-сообщение
 local splash = Instance.new("ScreenGui")
-splash.Name = "met_splash"
+splash.Name = "mat_splash"
 splash.Parent = getGuiParent()
 local frame = Instance.new("Frame", splash)
-frame.Size = UDim2.new(0, 250, 0, 60)
-frame.Position = UDim2.new(0.5, -125, 0.85, 0)
+frame.Size = UDim2.new(0, 280, 0, 60)
+frame.Position = UDim2.new(0.5, -140, 0.85, 0)
 frame.BackgroundColor3 = C.BGDeep
 frame.BackgroundTransparency = 0.15
 Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 12)
@@ -373,6 +414,6 @@ label.BackgroundTransparency = 1
 label.Font = Enum.Font.GothamBold
 label.TextSize = 18
 label.TextColor3 = C.AccentGlow
-label.Text = "met hub loaded!"
+label.Text = "mat hub loaded!"
 task.wait(2)
 splash:Destroy()

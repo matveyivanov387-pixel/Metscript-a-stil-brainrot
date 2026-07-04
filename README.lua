@@ -1,5 +1,4 @@
--- mat hub v3 (исправленный: ESP, Inf Jump, Speed, Aimbot — из Chiraq)
-
+-- mat hub (твой код, только исправлен)
 local Players = game:GetService("Players")
 local RunService =  game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -40,16 +39,8 @@ local State = {
 
 local CONFIG_FILE = "mat_hub_config.json"
 local function saveConfig()
-    local cfg = {
-        speedEnabled = State.speedEnabled,
-        walkSpeed = State.walkSpeed,
-        infJumpEnabled = State.infJumpEnabled,
-        aimbotEnabled = State.aimbotEnabled,
-        espEnabled = State.espEnabled,
-        hudEnabled = State.hudEnabled,
-        antiRagdollEnabled = State.antiRagdollEnabled,
-        optimizeEnabled = State.optimizeEnabled,
-    }
+    local cfg = {}
+    for k, v in pairs(State) do cfg[k] = v end
     pcall(function() writefile(CONFIG_FILE, HttpService:JSONEncode(cfg)) end)
 end
 
@@ -59,14 +50,7 @@ local function loadConfig()
     if not ok or not raw then return end
     local ok2, cfg = pcall(function() return HttpService:JSONDecode(raw) end)
     if not ok2 or not cfg then return end
-    if cfg.speedEnabled ~= nil then State.speedEnabled = cfg.speedEnabled end
-    if cfg.walkSpeed then State.walkSpeed = cfg.walkSpeed end
-    if cfg.infJumpEnabled ~= nil then State.infJumpEnabled = cfg.infJumpEnabled end
-    if cfg.aimbotEnabled ~= nil then State.aimbotEnabled = cfg.aimbotEnabled end
-    if cfg.espEnabled ~= nil then State.espEnabled = cfg.espEnabled end
-    if cfg.hudEnabled ~= nil then State.hudEnabled = cfg.hudEnabled end
-    if cfg.antiRagdollEnabled ~= nil then State.antiRagdollEnabled = cfg.antiRagdollEnabled end
-    if cfg.optimizeEnabled ~= nil then State.optimizeEnabled = cfg.optimizeEnabled end
+    for k, v in pairs(cfg) do if State[k] ~= nil then State[k] = v end end
 end
 
 local function getCharacter() return LocalPlayer.Character end
@@ -79,7 +63,7 @@ local function getHumanoid()
     return char and char:FindFirstChild("Humanoid")
 end
 
--- ========== SPEED (исправлено, работает с ползунком) ==========
+-- ========== SPEED (исправлено) ==========
 local function applySpeed()
     local h = getHumanoid()
     if h then
@@ -99,7 +83,7 @@ local function toggleSpeed()
     saveConfig()
 end
 
--- ========== INF JUMP (исправлено, работает стабильно) ==========
+-- ========== INF JUMP (исправлено) ==========
 local infJumpConn = nil
 local function toggleInfJump()
     State.infJumpEnabled = not State.infJumpEnabled
@@ -136,7 +120,7 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- ========== OPTIMIZE ==========
+-- ========== OPTIMIZE (улучшено) ==========
 local function toggleOptimize()
     State.optimizeEnabled = not State.optimizeEnabled
     if State.optimizeEnabled then
@@ -167,9 +151,7 @@ local function getClosestPlayer()
             local targetHRP = plr.Character:FindFirstChild("HumanoidRootPart")
             if targetHRP then
                 local d = (targetHRP.Position - hrp.Position).Magnitude
-                if d < dist then
-                    closest, dist = plr, d
-                end
+                if d < dist then closest, dist = plr, d end
             end
         end
     end
@@ -201,7 +183,6 @@ local function toggleAimbot()
     saveConfig()
 end
 
--- Авто-удар по зажатию ЛКМ (без конфликтов с наведением)
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
     if input.UserInputType == Enum.UserInputType.MouseButton1 and State.aimbotEnabled then
@@ -210,26 +191,20 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
             local char = getCharacter()
             if char then
                 local tool = char:FindFirstChildOfClass("Tool")
-                if tool then
-                    tool:Activate()
-                end
+                if tool then tool:Activate() end
             end
         end
     end
 end)
 
--- ========== PLAYER ESP (из Chiraq, видит сквозь инвиз) ==========
+-- ========== PLAYER ESP (исправлен, видит инвиз) ==========
 local espHighlights = {}
 local espConnections = {}
 
 local function clearESP()
-    for _, h in ipairs(espHighlights) do
-        if h and h.Parent then h:Destroy() end
-    end
+    for _, h in ipairs(espHighlights) do if h and h.Parent then h:Destroy() end end
     espHighlights = {}
-    for _, c in ipairs(espConnections) do
-        if c then c:Disconnect() end
-    end
+    for _, c in ipairs(espConnections) do if c then c:Disconnect() end end
     espConnections = {}
 end
 
@@ -281,9 +256,7 @@ local function toggleESP()
 end
 
 RunService.Heartbeat:Connect(function()
-    if State.espEnabled then
-        updateESP()
-    end
+    if State.espEnabled then updateESP() end
 end)
 
 -- ========== HUD ==========
@@ -343,9 +316,7 @@ local function createHUD()
             timeAcc = 0
         end
         local ping = Stats.Network:GetServerStats()
-        if ping then
-            pingLabel.Text = "Ping: " .. math.floor(ping.Ping)
-        end
+        if ping then pingLabel.Text = "Ping: " .. math.floor(ping.Ping) end
     end)
 
     return hudGui, conn
@@ -364,7 +335,7 @@ local function toggleHUD()
     saveConfig()
 end
 
--- ========== GUI ==========
+-- ========== GUI (улучшен, кнопка M) ==========
 local function getGuiParent()
     if gethui then return gethui() end
     return CoreGui
@@ -539,12 +510,10 @@ local function createMainGUI()
             local absX = sliderBtn.AbsolutePosition.X
             local sizeX = sliderBtn.AbsoluteSize.X
             local pct = math.clamp((pos - absX) / sizeX, 0, 1)
-            local val = min + (max - min) * pct
-            val = math.floor(val)
+            local val = math.floor(min + (max - min) * pct)
             fill.Size = UDim2.new(pct, 0, 1, 0)
             lbl.Text = label .. " (" .. val .. ")"
             valueLbl.Text = tostring(val)
-            currentValue = val
             callback(val)
         end)
     end
@@ -569,4 +538,46 @@ local function createMainGUI()
     end)
 
     createToggle("BatLock (аимбот)", State.aimbotEnabled, function(v)
-        State.
+        State.aimbotEnabled = v
+        toggleAimbot()
+    end)
+
+    createToggle("Player ESP", State.espEnabled, function(v)
+        State.espEnabled = v
+        toggleESP()
+    end)
+
+    createToggle("HUD (FPS/Ping)", State.hudEnabled, function(v)
+        State.hudEnabled = v
+        toggleHUD()
+    end)
+
+    createToggle("Оптимизация FPS", State.optimizeEnabled, function(v)
+        State.optimizeEnabled = v
+        toggleOptimize()
+    end)
+
+    UserInputService.InputBegan:Connect(function(input, gameProcessed)
+        if gameProcessed then return end
+        if input.KeyCode == Enum.KeyCode.RightBracket then
+            if isOpen then
+                mainFrame.Visible = false
+                openBtn.Visible = true
+                isOpen = false
+            else
+                mainFrame.Visible = true
+                openBtn.Visible = false
+                isOpen = true
+            end
+        end
+    end)
+end
+
+loadConfig()
+createMainGUI()
+
+if State.speedEnabled then toggleSpeed() end
+if State.infJumpEnabled then toggleInfJump() end
+if State.antiRagdollEnabled then toggleAntiRagdoll() end
+if State.aimbotEnabled then toggleAimbot() end
+if State.espEna

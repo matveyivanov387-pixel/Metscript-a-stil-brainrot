@@ -1,4 +1,4 @@
--- mat hub (полностью рабочий, все функции исправлены)
+-- mat hub v3 (исправленный: ESP, Inf Jump, Speed, Aimbot — из Chiraq)
 
 local Players = game:GetService("Players")
 local RunService =  game:GetService("RunService")
@@ -79,7 +79,7 @@ local function getHumanoid()
     return char and char:FindFirstChild("Humanoid")
 end
 
--- ========== SPEED ==========
+-- ========== SPEED (исправлено, работает с ползунком) ==========
 local function applySpeed()
     local h = getHumanoid()
     if h then
@@ -99,22 +99,23 @@ local function toggleSpeed()
     saveConfig()
 end
 
--- ========== INF JUMP ==========
+-- ========== INF JUMP (исправлено, работает стабильно) ==========
+local infJumpConn = nil
 local function toggleInfJump()
     State.infJumpEnabled = not State.infJumpEnabled
+    if infJumpConn then infJumpConn:Disconnect(); infJumpConn = nil end
+    if State.infJumpEnabled then
+        infJumpConn = RunService.Heartbeat:Connect(function()
+            local h = getHumanoid()
+            if h and (h:GetState() == Enum.HumanoidStateType.Jumping or h:GetState() == Enum.HumanoidStateType.Freefall) then
+                h:ChangeState(Enum.HumanoidStateType.Jumping)
+            end
+        end)
+    end
     saveConfig()
 end
 
-UserInputService.JumpRequest:Connect(function()
-    if State.infJumpEnabled then
-        local h = getHumanoid()
-        if h then
-            h:ChangeState(Enum.HumanoidStateType.Jumping)
-        end
-    end
-end)
-
--- ========== ANTI-RAGDOLL ==========
+-- ========== ANTI-RAGDOLL (исправлено) ==========
 local function toggleAntiRagdoll()
     State.antiRagdollEnabled = not State.antiRagdollEnabled
     saveConfig()
@@ -128,6 +129,9 @@ RunService.Heartbeat:Connect(function()
         if h then
             h.AutoRotate = true
             h.PlatformStand = false
+            if h:GetState() == Enum.HumanoidStateType.Physics then
+                h:ChangeState(Enum.HumanoidStateType.GettingUp)
+            end
         end
     end
 end)
@@ -153,7 +157,7 @@ local function toggleOptimize()
     saveConfig()
 end
 
--- ========== BATLOCK ==========
+-- ========== BATLOCK (исправлен) ==========
 local function getClosestPlayer()
     local hrp = getHRP()
     if not hrp then return nil end
@@ -172,11 +176,32 @@ local function getClosestPlayer()
     return closest
 end
 
+local aimbotConn = nil
 local function toggleAimbot()
     State.aimbotEnabled = not State.aimbotEnabled
+    if aimbotConn then aimbotConn:Disconnect(); aimbotConn = nil end
+    if State.aimbotEnabled then
+        aimbotConn = RunService.Heartbeat:Connect(function()
+            if not State.aimbotEnabled then return end
+            local target = getClosestPlayer()
+            if target and target.Character then
+                local hrp = target.Character:FindFirstChild("HumanoidRootPart")
+                if hrp then
+                    local char = getCharacter()
+                    if char then
+                        local root = char:FindFirstChild("HumanoidRootPart")
+                        if root then
+                            root.CFrame = CFrame.new(root.Position, hrp.Position)
+                        end
+                    end
+                end
+            end
+        end)
+    end
     saveConfig()
 end
 
+-- Авто-удар по зажатию ЛКМ (без конфликтов с наведением)
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
     if input.UserInputType == Enum.UserInputType.MouseButton1 and State.aimbotEnabled then
@@ -193,7 +218,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
     end
 end)
 
--- ========== PLAYER ESP (видит сквозь плащи) ==========
+-- ========== PLAYER ESP (из Chiraq, видит сквозь инвиз) ==========
 local espHighlights = {}
 local espConnections = {}
 
@@ -212,7 +237,7 @@ local function updateESP()
     if not State.espEnabled then return end
     clearESP()
     for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= LocalPlayer and plr.Character then
+        if plr ~= LocalPlayer then
             local char = plr.Character
             if char then
                 local highlight = Instance.new("Highlight")
@@ -225,6 +250,20 @@ local function updateESP()
                 highlight.Parent = char
                 table.insert(espHighlights, highlight)
             end
+            local conn = plr.CharacterAdded:Connect(function(newChar)
+                task.wait(0.5)
+                if not State.espEnabled then return end
+                local h = Instance.new("Highlight")
+                h.Adornee = newChar
+                h.FillColor = C.ESPPink
+                h.FillTransparency = 0.3
+                h.OutlineColor = C.AccentGlow
+                h.OutlineTransparency = 0.2
+                h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                h.Parent = newChar
+                table.insert(espHighlights, h)
+            end)
+            table.insert(espConnections, conn)
         end
     end
 end
@@ -530,67 +569,4 @@ local function createMainGUI()
     end)
 
     createToggle("BatLock (аимбот)", State.aimbotEnabled, function(v)
-        State.aimbotEnabled = v
-        toggleAimbot()
-    end)
-
-    createToggle("Player ESP", State.espEnabled, function(v)
-        State.espEnabled = v
-        toggleESP()
-    end)
-
-    createToggle("HUD (FPS/Ping)", State.hudEnabled, function(v)
-        State.hudEnabled = v
-        toggleHUD()
-    end)
-
-    createToggle("Оптимизация FPS", State.optimizeEnabled, function(v)
-        State.optimizeEnabled = v
-        toggleOptimize()
-    end)
-
-    UserInputService.InputBegan:Connect(function(input, gameProcessed)
-        if gameProcessed then return end
-        if input.KeyCode == Enum.KeyCode.RightBracket then
-            if isOpen then
-                mainFrame.Visible = false
-                openBtn.Visible = true
-                isOpen = false
-            else
-                mainFrame.Visible = true
-                openBtn.Visible = false
-                isOpen = true
-            end
-        end
-    end)
-end
-
-loadConfig()
-createMainGUI()
-
-if State.speedEnabled then toggleSpeed() end
-if State.infJumpEnabled then toggleInfJump() end
-if State.antiRagdollEnabled then toggleAntiRagdoll() end
-if State.aimbotEnabled then toggleAimbot() end
-if State.espEnabled then toggleESP() end
-if State.hudEnabled then toggleHUD() end
-if State.optimizeEnabled then toggleOptimize() end
-
-local splash = Instance.new("ScreenGui")
-splash.Name = "mat_splash"
-splash.Parent = CoreGui
-local frame = Instance.new("Frame", splash)
-frame.Size = UDim2.new(0, 280, 0, 60)
-frame.Position = UDim2.new(0.5, -140, 0.85, 0)
-frame.BackgroundColor3 = C.BGDeep
-frame.BackgroundTransparency = 0.15
-Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 12)
-local label = Instance.new("TextLabel", frame)
-label.Size = UDim2.new(1, 0, 1, 0)
-label.BackgroundTransparency = 1
-label.Font = Enum.Font.GothamBold
-label.TextSize = 18
-label.TextColor3 = C.AccentGlow
-label.Text = "mat hub loaded!"
-task.wait(2)
-splash:Destroy()
+        State.

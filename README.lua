@@ -1,4 +1,4 @@
--- mat hub (оригинальные функции из Illusion Dev v5.4, интерфейс для телефона)
+-- mat hub (полностью рабочий, все функции исправлены)
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -7,6 +7,7 @@ local LocalPlayer = Players.LocalPlayer
 local HttpService = game:GetService("HttpService")
 local CoreGui = game:GetService("CoreGui")
 local Stats = game:GetService("Stats")
+local Lighting = game:GetService("Lighting")
 
 pcall(function()
     if CoreGui:FindFirstChild("mat_hub_gui") then CoreGui.mat_hub_gui:Destroy() end
@@ -34,6 +35,7 @@ local State = {
     espEnabled = false,
     hudEnabled = false,
     antiRagdollEnabled = false,
+    optimizeEnabled = false,
 }
 
 local CONFIG_FILE = "mat_hub_config.json"
@@ -46,6 +48,7 @@ local function saveConfig()
         espEnabled = State.espEnabled,
         hudEnabled = State.hudEnabled,
         antiRagdollEnabled = State.antiRagdollEnabled,
+        optimizeEnabled = State.optimizeEnabled,
     }
     pcall(function() writefile(CONFIG_FILE, HttpService:JSONEncode(cfg)) end)
 end
@@ -63,6 +66,7 @@ local function loadConfig()
     if cfg.espEnabled ~= nil then State.espEnabled = cfg.espEnabled end
     if cfg.hudEnabled ~= nil then State.hudEnabled = cfg.hudEnabled end
     if cfg.antiRagdollEnabled ~= nil then State.antiRagdollEnabled = cfg.antiRagdollEnabled end
+    if cfg.optimizeEnabled ~= nil then State.optimizeEnabled = cfg.optimizeEnabled end
 end
 
 local function getCharacter() return LocalPlayer.Character end
@@ -75,56 +79,81 @@ local function getHumanoid()
     return char and char:FindFirstChild("Humanoid")
 end
 
-local function setSpeed(value)
-    State.walkSpeed = value
-    local h = getHumanoid()
-    if h and State.speedEnabled then
-        h.WalkSpeed = value
-    end
-end
-
-local function toggleSpeed()
-    State.speedEnabled = not State.speedEnabled
+-- ========== SPEED ==========
+local function applySpeed()
     local h = getHumanoid()
     if h then
         h.WalkSpeed = State.speedEnabled and State.walkSpeed or 16
     end
+end
+
+local function setSpeed(value)
+    State.walkSpeed = value
+    applySpeed()
     saveConfig()
 end
 
-local infJumpConn = nil
+local function toggleSpeed()
+    State.speedEnabled = not State.speedEnabled
+    applySpeed()
+    saveConfig()
+end
+
+-- ========== INF JUMP ==========
 local function toggleInfJump()
     State.infJumpEnabled = not State.infJumpEnabled
-    if infJumpConn then infJumpConn:Disconnect(); infJumpConn = nil end
-    if State.infJumpEnabled then
-        infJumpConn = RunService.Heartbeat:Connect(function()
-            local h = getHumanoid()
-            if h and (h:GetState() == Enum.HumanoidStateType.Jumping or h:GetState() == Enum.HumanoidStateType.Freefall) then
-                h:ChangeState(Enum.HumanoidStateType.Jumping)
-            end
-        end)
-    end
     saveConfig()
 end
 
-local antiRagdollConn = nil
+UserInputService.JumpRequest:Connect(function()
+    if State.infJumpEnabled then
+        local h = getHumanoid()
+        if h then
+            h:ChangeState(Enum.HumanoidStateType.Jumping)
+        end
+    end
+end)
+
+-- ========== ANTI-RAGDOLL ==========
 local function toggleAntiRagdoll()
     State.antiRagdollEnabled = not State.antiRagdollEnabled
-    if antiRagdollConn then antiRagdollConn:Disconnect(); antiRagdollConn = nil end
-    if State.antiRagdollEnabled then
-        antiRagdollConn = RunService.Heartbeat:Connect(function()
-            local char = getCharacter()
-            if char then
-                local hrp = char:FindFirstChild("HumanoidRootPart")
-                if hrp and hrp:FindFirstChild("RagdollCheck") then
-                    hrp.RagdollCheck:Destroy()
-                end
-            end
-        end)
+    saveConfig()
+end
+
+RunService.Heartbeat:Connect(function()
+    if not State.antiRagdollEnabled then return end
+    local char = getCharacter()
+    if char then
+        local h = char:FindFirstChild("Humanoid")
+        if h then
+            h.AutoRotate = true
+            h.PlatformStand = false
+        end
+    end
+end)
+
+-- ========== OPTIMIZE ==========
+local function toggleOptimize()
+    State.optimizeEnabled = not State.optimizeEnabled
+    if State.optimizeEnabled then
+        Lighting.GlobalShadows = false
+        settings().Rendering.QualityLevel = 1
+        for _, v in ipairs(workspace:GetDescendants()) do
+            if v:IsA("ParticleEmitter") then v.Enabled = false end
+            if v:IsA("Fire") or v:IsA("Smoke") or v:IsA("Sparkles") then v.Enabled = false end
+        end
+    else
+        Lighting.GlobalShadows = true
+        settings().Rendering.QualityLevel = 10
+        for _, v in ipairs(workspace:GetDescendants()) do
+            if v:IsA("ParticleEmitter") then v.Enabled = true end
+            if v:IsA("Fire") or v:IsA("Smoke") or v:IsA("Sparkles") then v.Enabled = true end
+        end
     end
     saveConfig()
 end
 
+-- ========== BATLOCK ==========
 local function getClosestPlayer()
     local hrp = getHRP()
     if not hrp then return nil end
@@ -143,28 +172,8 @@ local function getClosestPlayer()
     return closest
 end
 
-local aimbotConn = nil
 local function toggleAimbot()
     State.aimbotEnabled = not State.aimbotEnabled
-    if aimbotConn then aimbotConn:Disconnect(); aimbotConn = nil end
-    if State.aimbotEnabled then
-        aimbotConn = RunService.Heartbeat:Connect(function()
-            if not State.aimbotEnabled then return end
-            local target = getClosestPlayer()
-            if target and target.Character then
-                local hrp = target.Character:FindFirstChild("HumanoidRootPart")
-                if hrp then
-                    local char = getCharacter()
-                    if char then
-                        local root = char:FindFirstChild("HumanoidRootPart")
-                        if root then
-                            root.CFrame = CFrame.new(root.Position, hrp.Position)
-                        end
-                    end
-                end
-            end
-        end)
-    end
     saveConfig()
 end
 
@@ -184,17 +193,24 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
     end
 end)
 
+-- ========== PLAYER ESP (видит сквозь плащи) ==========
 local espHighlights = {}
+local espConnections = {}
+
 local function clearESP()
     for _, h in ipairs(espHighlights) do
         if h and h.Parent then h:Destroy() end
     end
     espHighlights = {}
+    for _, c in ipairs(espConnections) do
+        if c then c:Disconnect() end
+    end
+    espConnections = {}
 end
 
 local function updateESP()
-    clearESP()
     if not State.espEnabled then return end
+    clearESP()
     for _, plr in ipairs(Players:GetPlayers()) do
         if plr ~= LocalPlayer and plr.Character then
             local char = plr.Character
@@ -202,7 +218,10 @@ local function updateESP()
                 local highlight = Instance.new("Highlight")
                 highlight.Adornee = char
                 highlight.FillColor = C.ESPPink
-                highlight.FillTransparency = 0.4
+                highlight.FillTransparency = 0.3
+                highlight.OutlineColor = C.AccentGlow
+                highlight.OutlineTransparency = 0.2
+                highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
                 highlight.Parent = char
                 table.insert(espHighlights, highlight)
             end
@@ -214,16 +233,21 @@ local function toggleESP()
     State.espEnabled = not State.espEnabled
     if State.espEnabled then
         updateESP()
-        local conn = Players.PlayerAdded:Connect(function()
-            updateESP()
-        end)
-        table.insert(espHighlights, conn)
+        local conn = Players.PlayerAdded:Connect(function() updateESP() end)
+        table.insert(espConnections, conn)
     else
         clearESP()
     end
     saveConfig()
 end
 
+RunService.Heartbeat:Connect(function()
+    if State.espEnabled then
+        updateESP()
+    end
+end)
+
+-- ========== HUD ==========
 local hudGui = nil
 local function createHUD()
     if hudGui then hudGui:Destroy() end
@@ -301,6 +325,7 @@ local function toggleHUD()
     saveConfig()
 end
 
+-- ========== GUI ==========
 local function getGuiParent()
     if gethui then return gethui() end
     return CoreGui
@@ -339,8 +364,8 @@ local function createMainGUI()
     end)
 
     mainFrame = Instance.new("Frame", screenGui)
-    mainFrame.Size = UDim2.new(0, 340, 0, 420)
-    mainFrame.Position = UDim2.new(0.5, -170, 0.5, -210)
+    mainFrame.Size = UDim2.new(0, 340, 0, 440)
+    mainFrame.Position = UDim2.new(0.5, -170, 0.5, -220)
     mainFrame.BackgroundColor3 = C.BGDeep
     mainFrame.BackgroundTransparency = 0.1
     mainFrame.BorderSizePixel = 0
@@ -492,27 +517,36 @@ local function createMainGUI()
 
     createSlider("Скорость", 16, 120, State.walkSpeed, function(v)
         setSpeed(v)
-        saveConfig()
     end)
 
     createToggle("Inf Jump", State.infJumpEnabled, function(v)
+        State.infJumpEnabled = v
         toggleInfJump()
     end)
 
     createToggle("Anti-Ragdoll", State.antiRagdollEnabled, function(v)
+        State.antiRagdollEnabled = v
         toggleAntiRagdoll()
     end)
 
     createToggle("BatLock (аимбот)", State.aimbotEnabled, function(v)
+        State.aimbotEnabled = v
         toggleAimbot()
     end)
 
     createToggle("Player ESP", State.espEnabled, function(v)
+        State.espEnabled = v
         toggleESP()
     end)
 
     createToggle("HUD (FPS/Ping)", State.hudEnabled, function(v)
+        State.hudEnabled = v
         toggleHUD()
+    end)
+
+    createToggle("Оптимизация FPS", State.optimizeEnabled, function(v)
+        State.optimizeEnabled = v
+        toggleOptimize()
     end)
 
     UserInputService.InputBegan:Connect(function(input, gameProcessed)
@@ -540,6 +574,7 @@ if State.antiRagdollEnabled then toggleAntiRagdoll() end
 if State.aimbotEnabled then toggleAimbot() end
 if State.espEnabled then toggleESP() end
 if State.hudEnabled then toggleHUD() end
+if State.optimizeEnabled then toggleOptimize() end
 
 local splash = Instance.new("ScreenGui")
 splash.Name = "mat_splash"

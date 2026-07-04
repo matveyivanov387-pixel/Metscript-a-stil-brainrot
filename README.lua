@@ -47,7 +47,9 @@ local State = {
 local CONFIG_FILE = "mat_hub_v3_config.json"
 local function saveConfig()
     local cfg = {}
-    for k, v in pairs(State) do cfg[k] = v end
+    for k, v in pairs(State) do
+        cfg[k] = v
+    end
     pcall(function() writefile(CONFIG_FILE, HttpService:JSONEncode(cfg)) end)
 end
 
@@ -565,5 +567,4 @@ local function createMainGUI()
         lbl.TextXAlignment = Enum.TextXAlignment.Left
 
         local valueLbl = Instance.new("TextLabel", frame)
-        valueLbl.Size = UDim2.new(0,50,0,18)
-        
+        valueLbl.Size = UDim2.new

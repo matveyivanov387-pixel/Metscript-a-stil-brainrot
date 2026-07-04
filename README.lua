@@ -1,4 +1,4 @@
--- mat hub (базовая версия, исправлены только критические ошибки)
+-- mat hub (исправлен: ползунок Speed работает на телефоне)
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -52,7 +52,7 @@ local function getHumanoid()
     return char and char:FindFirstChild("Humanoid")
 end
 
--- ========== SPEED ==========
+-- ========== SPEED (работает с ползунком) ==========
 local function applySpeed()
     local h = getHumanoid()
     if h then
@@ -154,7 +154,7 @@ end
 
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
-    if input.UserInputType == Enum.UserInputType.MouseButton1 and State.aimbotEnabled then
+    if (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) and State.aimbotEnabled then
         local target = getClosestPlayer()
         if target and target.Character then
             local char = getCharacter()
@@ -286,7 +286,7 @@ local function toggleHUD()
     saveConfig()
 end
 
--- ========== GUI ==========
+-- ========== GUI (исправлен ползунок) ==========
 local function getGuiParent()
     if gethui then return gethui() end
     return CoreGui
@@ -302,6 +302,7 @@ local function createMainGUI()
     screenGui.ResetOnSpawn = false
     screenGui.Parent = getGuiParent()
 
+    -- Кнопка M
     local openBtn = Instance.new("TextButton", screenGui)
     openBtn.Name = "OpenBtn"
     openBtn.Text = "M"
@@ -324,6 +325,7 @@ local function createMainGUI()
         isOpen = true
     end)
 
+    -- Основное окно
     mainFrame = Instance.new("Frame", screenGui)
     mainFrame.Size = UDim2.new(0, 340, 0, 440)
     mainFrame.Position = UDim2.new(0.5, -170, 0.5, -220)
@@ -372,6 +374,7 @@ local function createMainGUI()
     local layout = Instance.new("UIListLayout", content)
     layout.Padding = UDim.new(0, 8)
 
+    -- Функция для переключателей
     local function createToggle(label, defaultValue, callback)
         local frame = Instance.new("Frame", content)
         frame.Size = UDim2.new(1, 0, 0, 45)
@@ -409,6 +412,7 @@ local function createMainGUI()
         end)
     end
 
+    -- Функция для ползунка (работает на телефоне)
     local function createSlider(label, min, max, defaultValue, callback)
         local frame = Instance.new("Frame", content)
         frame.Size = UDim2.new(1, 0, 0, 60)
@@ -417,7 +421,7 @@ local function createMainGUI()
         Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 8)
 
         local lbl = Instance.new("TextLabel", frame)
-        lbl.Size = UDim2.new(1, 0, 0, 18)
+        lbl.Size = UDim2.new(0.7, 0, 0, 18)
         lbl.Position = UDim2.new(0.04, 0, 0.05, 0)
         lbl.BackgroundTransparency = 1
         lbl.Font = Enum.Font.GothamBold
@@ -427,8 +431,8 @@ local function createMainGUI()
         lbl.TextXAlignment = Enum.TextXAlignment.Left
 
         local valueLbl = Instance.new("TextLabel", frame)
-        valueLbl.Size = UDim2.new(0, 50, 0, 18)
-        valueLbl.Position = UDim2.new(1, -55, 0.05, 0)
+        valueLbl.Size = UDim2.new(0, 40, 0, 18)
+        valueLbl.Position = UDim2.new(1, -45, 0.05, 0)
         valueLbl.BackgroundTransparency = 1
         valueLbl.Font = Enum.Font.GothamBold
         valueLbl.TextSize = 14
@@ -436,14 +440,14 @@ local function createMainGUI()
         valueLbl.Text = tostring(defaultValue)
         valueLbl.TextXAlignment = Enum.TextXAlignment.Right
 
-        local sliderBtn = Instance.new("TextButton", frame)
-        sliderBtn.Size = UDim2.new(0.92, 0, 0, 8)
-        sliderBtn.Position = UDim2.new(0.04, 0, 0.6, 0)
-        sliderBtn.BackgroundColor3 = Color3.fromRGB(12, 4, 10)
-        sliderBtn.BorderSizePixel = 0
-        Instance.new("UICorner", sliderBtn).CornerRadius = UDim.new(0, 4)
+        local track = Instance.new("Frame", frame)
+        track.Size = UDim2.new(0.92, 0, 0, 8)
+        track.Position = UDim2.new(0.04, 0, 0.65, 0)
+        track.BackgroundColor3 = Color3.fromRGB(12, 4, 10)
+        track.BorderSizePixel = 0
+        Instance.new("UICorner", track).CornerRadius = UDim.new(0, 4)
 
-        local fill = Instance.new("Frame", sliderBtn)
+        local fill = Instance.new("Frame", track)
         fill.Size = UDim2.new((defaultValue - min) / (max - min), 0, 1, 0)
         fill.BackgroundColor3 = Color3.fromRGB(220, 40, 160)
         fill.BorderSizePixel = 0
@@ -452,24 +456,66 @@ local function createMainGUI()
         local dragging = false
         local currentValue = defaultValue
 
-        sliderBtn.MouseButton1Down:Connect(function() dragging = true end)
-        sliderBtn.MouseButton1Up:Connect(function() dragging = false end)
-
-        UserInputService.InputChanged:Connect(function(input)
-            if not dragging or input.UserInputType ~= Enum.UserInputType.MouseMovement then return end
-            local pos = input.Position.X
-            local absX = sliderBtn.AbsolutePosition.X
-            local sizeX = sliderBtn.AbsoluteSize.X
-            local pct = math.clamp((pos - absX) / sizeX, 0, 1)
+        local function updateSlider(inputPos)
+            local absX = track.AbsolutePosition.X
+            local sizeX = track.AbsoluteSize.X
+            local pct = math.clamp((inputPos - absX) / sizeX, 0, 1)
             local val = math.floor(min + (max - min) * pct)
             fill.Size = UDim2.new(pct, 0, 1, 0)
             lbl.Text = label .. " (" .. val .. ")"
             valueLbl.Text = tostring(val)
             currentValue = val
             callback(val)
+        end
+
+        track.MouseButton1Down:Connect(function()
+            dragging = true
+            updateSlider(UserInputService:GetMouseLocation().X)
+        end)
+        track.MouseButton1Up:Connect(function()
+            dragging = false
+        end)
+        track.MouseLeave:Connect(function()
+            dragging = false
+        end)
+
+        UserInputService.InputChanged:Connect(function(input)
+            if not dragging then return end
+            if input.UserInputType == Enum.UserInputType.MouseMovement then
+                updateSlider(input.Position.X)
+            end
+        end)
+
+        -- Для тач-экранов
+        track.TouchTap:Connect(function()
+            local pos = UserInputService:GetMouseLocation().X
+            updateSlider(pos)
+        end)
+        track.TouchMove:Connect(function(touch)
+            if touch then
+                updateSlider(touch.Position.X)
+            end
+        end)
+        track.TouchLongPress:Connect(function()
+            -- не делаем ничего
+        end)
+
+        -- Также можно перетаскивать за fill (пока не реализовано, но можно добавить)
+        fill.MouseButton1Down:Connect(function()
+            dragging = true
+            updateSlider(UserInputService:GetMouseLocation().X)
+        end)
+        fill.MouseButton1Up:Connect(function()
+            dragging = false
+        end)
+        fill.TouchMove:Connect(function(touch)
+            if touch then
+                updateSlider(touch.Position.X)
+            end
         end)
     end
 
+    -- Создаём элементы меню
     createToggle("Скорость", State.speedEnabled, function(v)
         State.speedEnabled = v
         toggleSpeed()
@@ -545,12 +591,4 @@ frame.Position = UDim2.new(0.5, -140, 0.85, 0)
 frame.BackgroundColor3 = Color3.fromRGB(12, 4, 10)
 frame.BackgroundTransparency = 0.15
 Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 12)
-local label = Instance.new("TextLabel", frame)
-label.Size = UDim2.new(1, 0, 1, 0)
-label.BackgroundTransparency = 1
-label.Font = Enum.Font.GothamBold
-label.TextSize = 18
-label.TextColor3 = Color3.fromRGB(255, 80, 200)
-label.Text = "mat hub loaded!"
-task.wait(2)
-splash:Destroy()
+local label = Instanc

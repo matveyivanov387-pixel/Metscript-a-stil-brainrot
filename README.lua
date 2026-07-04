@@ -1,4 +1,4 @@
--- mat hub (исправлен: ползунок Speed работает на телефоне)
+-- mat hub (фикс: ползунок Speed виден и работает на телефоне)
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -52,7 +52,7 @@ local function getHumanoid()
     return char and char:FindFirstChild("Humanoid")
 end
 
--- ========== SPEED (работает с ползунком) ==========
+-- ========== SPEED ==========
 local function applySpeed()
     local h = getHumanoid()
     if h then
@@ -286,7 +286,7 @@ local function toggleHUD()
     saveConfig()
 end
 
--- ========== GUI (исправлен ползунок) ==========
+-- ========== GUI (ползунок исправлен для телефона) ==========
 local function getGuiParent()
     if gethui then return gethui() end
     return CoreGui
@@ -412,7 +412,7 @@ local function createMainGUI()
         end)
     end
 
-    -- Функция для ползунка (работает на телефоне)
+    -- Функция для ползунка (работает на телефоне через TextButton)
     local function createSlider(label, min, max, defaultValue, callback)
         local frame = Instance.new("Frame", content)
         frame.Size = UDim2.new(1, 0, 0, 60)
@@ -440,11 +440,13 @@ local function createMainGUI()
         valueLbl.Text = tostring(defaultValue)
         valueLbl.TextXAlignment = Enum.TextXAlignment.Right
 
-        local track = Instance.new("Frame", frame)
+        -- Дорожка ползунка (TextButton, чтобы реагировал на тап)
+        local track = Instance.new("TextButton", frame)
         track.Size = UDim2.new(0.92, 0, 0, 8)
         track.Position = UDim2.new(0.04, 0, 0.65, 0)
         track.BackgroundColor3 = Color3.fromRGB(12, 4, 10)
         track.BorderSizePixel = 0
+        track.AutoButtonColor = false
         Instance.new("UICorner", track).CornerRadius = UDim.new(0, 4)
 
         local fill = Instance.new("Frame", track)
@@ -472,46 +474,41 @@ local function createMainGUI()
             dragging = true
             updateSlider(UserInputService:GetMouseLocation().X)
         end)
+
         track.MouseButton1Up:Connect(function()
             dragging = false
         end)
+
         track.MouseLeave:Connect(function()
             dragging = false
         end)
 
-        UserInputService.InputChanged:Connect(function(input)
-            if not dragging then return end
-            if input.UserInputType == Enum.UserInputType.MouseMovement then
-                updateSlider(input.Position.X)
+        track.MouseMove:Connect(function()
+            if dragging then
+                updateSlider(UserInputService:GetMouseLocation().X)
             end
         end)
 
         -- Для тач-экранов
-        track.TouchTap:Connect(function()
-            local pos = UserInputService:GetMouseLocation().X
-            updateSlider(pos)
-        end)
-        track.TouchMove:Connect(function(touch)
+        track.TouchBegan:Connect(function(touch)
             if touch then
+                dragging = true
                 updateSlider(touch.Position.X)
             end
-        end)
-        track.TouchLongPress:Connect(function()
-            -- не делаем ничего
         end)
 
-        -- Также можно перетаскивать за fill (пока не реализовано, но можно добавить)
-        fill.MouseButton1Down:Connect(function()
-            dragging = true
-            updateSlider(UserInputService:GetMouseLocation().X)
-        end)
-        fill.MouseButton1Up:Connect(function()
-            dragging = false
-        end)
-        fill.TouchMove:Connect(function(touch)
-            if touch then
+        track.TouchMoved:Connect(function(touch)
+            if touch and dragging then
                 updateSlider(touch.Position.X)
             end
+        end)
+
+        track.TouchEnded:Connect(function()
+            dragging = false
+        end)
+
+        track.TouchCancelled:Connect(function()
+            dragging = false
         end)
     end
 
@@ -591,4 +588,12 @@ frame.Position = UDim2.new(0.5, -140, 0.85, 0)
 frame.BackgroundColor3 = Color3.fromRGB(12, 4, 10)
 frame.BackgroundTransparency = 0.15
 Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 12)
-local label = Instanc
+local label = Instance.new("TextLabel", frame)
+label.Size = UDim2.new(1, 0, 1, 0)
+label.BackgroundTransparency = 1
+label.Font = Enum.Font.GothamBold
+label.TextSize = 18
+label.TextColor3 = Color3.fromRGB(255, 80, 200)
+label.Text = "mat hub loaded!"
+task.wait(2)
+splash:Destroy()
